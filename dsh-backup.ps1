@@ -18,10 +18,13 @@ param(
   [Parameter(Position = 0)][string]$Command = 'check',
   [Parameter(Position = 1)][string]$Target,
   [switch]$Full,
+  [switch]$AttachmentsOnly,
   [switch]$NoUpload,
+  [switch]$Upload,
   [switch]$Force,
   [int]$KeepCore = 7,
   [int]$KeepFull = 3,
+  [int]$KeepAttach = 12,
   [int]$KeepReleases = 10,
   [string]$LocalDir = 'D:\Backup\dsh-backups',
   [string]$Repo = 'sb1145148/dsh-backup'
@@ -281,15 +284,53 @@ function Do-Restore([string]$file) {
   Log '还原完成。启动 DSH 后如果对话列表异常，跑一次 dsh-reindex。'
 }
 
+# ---------------- 只备份 attachments ----------------
+function Do-PackAttachments {
+  $src = Join-Path $DshHome 'attachments'
+  if (-not (Test-Path $src)) { Fail '没有 attachments 目录' }
+
+  $month = Get-Date -Format 'yyyy-MM'
+  $existing = Get-ChildItem $LocalDir -Filter "dsh-attachments-$month-*.tar.gz" -ErrorAction SilentlyContinue
+  if ($existing -and -not $Force) {
+    Log ("本月已有附件备份: {0}（要重做加 -Force）" -f $existing[0].Name)
+    return
+  }
+
+  $name = "dsh-attachments-$month-" + (Get-Date -Format 'ddHHmm') + '.tar.gz'
+  $target = Join-Path $LocalDir $name
+
+  $sum = Get-ChildItem $src -Recurse -File | Measure-Object Length -Sum
+  Log ("开始附件备份: {0} 个文件 / {1:N1} MB" -f $sum.Count, ($sum.Sum / 1MB))
+
+  & tar -czf $target -C $DshHome attachments
+  if ($LASTEXITCODE -ne 0) { Remove-Item $target -Force -ErrorAction SilentlyContinue; Fail "tar 失败（$LASTEXITCODE）" }
+
+  $entries = @(& tar -tzf $target).Count
+  $sizeMB = [math]::Round((Get-Item $target).Length / 1MB, 1)
+  Log "完成: $sizeMB MB, $entries 条目"
+  if ($entries -lt 2) { Fail "条目异常（$entries），本次作废" }
+
+  $old = Get-ChildItem $LocalDir -Filter 'dsh-attachments-*.tar.gz' |
+    Sort-Object LastWriteTime -Descending | Select-Object -Skip $KeepAttach
+  foreach ($f in $old) { Remove-Item $f.FullName -Force; Log "清理旧附件备份: $($f.Name)" }
+
+  if ($NoUpload -or -not $Upload) {
+    Log '附件备份默认不上传（体积大，占 Release 存储）；确实要传加 -Upload'
+    return
+  }
+  Upload-Backup -Path $target -Name $name
+}
+
 switch ($Command.ToLower()) {
   'check'   { Do-Check }
-  'pack'    { Do-Pack }
+  'pack'    { if ($AttachmentsOnly) { Do-PackAttachments } else { Do-Pack } }
   'list'    { Do-List }
   'restore' { Do-Restore $Target }
   default   {
     Write-Host "用法:"
     Write-Host "  .\dsh-backup.ps1 check"
     Write-Host "  .\dsh-backup.ps1 pack [-Full] [-NoUpload] [-Force]"
+    Write-Host "  .\dsh-backup.ps1 pack -AttachmentsOnly     # 只备份 attachments（每月一份）"
     Write-Host "  .\dsh-backup.ps1 list"
     Write-Host "  .\dsh-backup.ps1 restore <包路径>"
   }

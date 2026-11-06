@@ -28,6 +28,7 @@
 .\dsh-backup.ps1 pack                     # 打包 + 校验 + 轮转 + 上传
 .\dsh-backup.ps1 pack -NoUpload           # 只留本地
 .\dsh-backup.ps1 pack -Full               # 连 attachments（只留本地）
+.\dsh-backup.ps1 pack -AttachmentsOnly    # 只备份附件（每月一份，留 12 份）
 .\dsh-backup.ps1 pack -Force              # 会话有问题也强行打包
 .\dsh-backup.ps1 list                     # 本地 + 云端清单
 .\dsh-backup.ps1 restore <包> [-Force]    # 还原（先校验再覆盖）
@@ -39,10 +40,27 @@
 | --- | --- | --- | --- | --- |
 | **核心**（默认） | `profiles/` `sessions/` `storages/` 凭据 | ~19 MB | 留 7 份 | ✅ Release |
 | **完整**（`-Full`） | 核心 + `attachments/` | ~340 MB | 留 3 份 | ❌ 太大 |
+| **附件**（`-AttachmentsOnly`） | 只 `attachments/` | ~243 MB | **留 12 份** | 默认不上传 |
 
-**为什么核心进 Release 不进 git**：每天 19 MB，一年 7 GB，git 历史会永久累积。
+### 为什么单独备份附件
 
-**排除项**：`profiles/*/node_modules`（约 60 MB，可重装）、`.plugin-manager`（日志）、`*.log`。
+附件（对话里的图片和上传的文件）是**唯一"丢就找不回"**的东西：
+
+- 会话文字在 `sessions/` 里，核心备份每天有
+- 但附件按 sha256 存在 `attachments/`，**不在核心备份里**
+
+完整备份虽然含附件，但只留 3 份——三周后最早的就被轮转删掉，里面的图片永久消失。
+
+`-AttachmentsOnly` 解决这个：**每月一份，保留 12 份**，只花 243 MB × 12。
+
+脚本内做月度去重：同一个月重复触发会直接跳过（`-Force` 强制重做）。
+
+```powershell
+.\dsh-backup.ps1 pack -AttachmentsOnly          # 本月第一次会打包，之后跳过
+.\dsh-backup.ps1 pack -AttachmentsOnly -Force   # 强制重做
+```
+
+附件备份**默认不上传**（体积大）。要传加 `-Upload`。
 
 ## 配置你自己的备份仓库
 
@@ -77,6 +95,7 @@ Set-Content -Path "$env:USERPROFILE\.dsh-backup-token" -Value "github_pat_xxx" -
 | --- | --- | --- |
 | `DSH-AutoBackup-Core` | 每天 03:30 | `pack` |
 | `DSH-AutoBackup-Full` | 每周日 04:00 | `pack -Full` |
+| `DSH-AutoBackup-Attach` | 每天 04:30（脚本内按月去重） | `pack -AttachmentsOnly` |
 
 两个任务都开了 `StartWhenAvailable`：关机错过，开机后补跑。
 
