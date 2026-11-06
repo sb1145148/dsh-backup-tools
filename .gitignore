@@ -1,0 +1,5 @@
+﻿# 令牌绝不入库
+.dsh-backup-token
+*.token
+# 备份包
+*.tar.gz
