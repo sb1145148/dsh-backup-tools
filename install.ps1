@@ -1,4 +1,4 @@
-﻿# dsh-backup-tools 一键安装
+# dsh-backup-tools 一键安装
 #
 # 用法（PowerShell）：
 #   iex ([Text.Encoding]::UTF8.GetString((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1).Content))

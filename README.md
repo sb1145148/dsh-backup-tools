@@ -12,17 +12,23 @@
 PowerShell 里跑这一行（会下载到 `%USERPROFILE%\dsh-backup-tools` 并自检）：
 
 ```powershell
-iex ([Text.Encoding]::UTF8.GetString((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1).Content))
+iex (irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1)
 ```
 
 **装完自动注册计划任务**：
 
 ```powershell
-iex ([Text.Encoding]::UTF8.GetString((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1).Content)) -Register
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1))) -Register
 ```
 
-> `irm` 单独用会把中文解码错，所以外面套了 `[Text.Encoding]::UTF8.GetString(...)`。
-> 嫌长可以直接下载 `install.ps1` 再跑：`.\install.ps1 -Dir D:\Tools\dsh-backup-tools -Register`
+> `iex` 不能传参数，所以注册版本用 `[scriptblock]::Create(...)` 包一层。
+>
+> 如果 `irm` 拿到的中文是乱码（少数代理会丢 `charset`），改用：
+>
+> ```powershell
+> $u = 'https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1'
+> iex ([Text.Encoding]::UTF8.GetString((Invoke-WebRequest $u -UseBasicParsing).RawContentStream.ToArray()))
+> ```
 
 安装脚本做的事：
 
