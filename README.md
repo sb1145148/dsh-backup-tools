@@ -12,23 +12,19 @@
 PowerShell 里跑这一行（会下载到 `%USERPROFILE%\dsh-backup-tools` 并自检）：
 
 ```powershell
-iex (irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1)
+iex ((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1).TrimStart([char]0xFEFF))
 ```
 
 **装完自动注册计划任务**：
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1))) -Register
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1).TrimStart([char]0xFEFF))) -Register
 ```
 
-> `iex` 不能传参数，所以注册版本用 `[scriptblock]::Create(...)` 包一层。
+> **为什么要有 `.TrimStart([char]0xFEFF)`**：PowerShell 5.1 的 `irm` 会把 UTF-8 响应解成带 BOM 的字符串，
+> 而 `iex` 遇到开头的 BOM 会报「无法将 `﻿Write-Host` 项识别为 cmdlet」。这一句把 BOM 去掉。
 >
-> 如果 `irm` 拿到的中文是乱码（少数代理会丢 `charset`），改用：
->
-> ```powershell
-> $u = 'https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1'
-> iex ([Text.Encoding]::UTF8.GetString((Invoke-WebRequest $u -UseBasicParsing).RawContentStream.ToArray()))
-> ```
+> 嫌长就下载后跑：`.\install.ps1 -Dir D:\Tools\dsh-backup-tools -Register`
 
 安装脚本做的事：
 
