@@ -7,6 +7,38 @@
 
 > 这是开源的工具本体。备份文件本身会传到**你自己指定的私有仓库**（见下面「配置你自己的备份仓库」），不进这个仓库。
 
+## 一键安装
+
+PowerShell 里跑这一行（会下载到 `%USERPROFILE%\dsh-backup-tools` 并自检）：
+
+```powershell
+iex ([Text.Encoding]::UTF8.GetString((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1).Content))
+```
+
+**装完自动注册计划任务**：
+
+```powershell
+iex ([Text.Encoding]::UTF8.GetString((irm https://raw.githubusercontent.com/sb1145148/dsh-backup-tools/main/install.ps1).Content)) -Register
+```
+
+> `irm` 单独用会把中文解码错，所以外面套了 `[Text.Encoding]::UTF8.GetString(...)`。
+> 嫌长可以直接下载 `install.ps1` 再跑：`.\install.ps1 -Dir D:\Tools\dsh-backup-tools -Register`
+
+安装脚本做的事：
+
+1. 从 `codeload.github.com` 下 zip（失败则逐个拉 raw 文件）
+2. 解到目标目录，清掉 `.git`
+3. 跑一次 `check` 自检（`-NoVerify` 可跳过）
+4. `-Register` 时调用 `setup-task.ps1` 注册三个计划任务
+
+## 手动安装
+
+```powershell
+git clone https://github.com/sb1145148/dsh-backup-tools
+cd dsh-backup-tools
+.\dsh-backup.ps1 check
+```
+
 ## 它比原版多做了什么
 
 | 能力 | dsh-tools 的 dsh-backup | 这个工具 |
@@ -146,6 +178,7 @@ Set-Content -Path "$env:USERPROFILE\.dsh-backup-token" -Value "github_pat_xxx" -
 
 | 文件 | 作用 |
 | --- | --- |
+| `install.ps1` | 一键安装（下载 → 落位 → 自检 → 可选注册任务） |
 | `dsh-backup.ps1` | 主程序（check / pack / list / restore） |
 | `lib/inspect-sessions.mjs` | 会话解析：按 zstd 帧切分，统计 seq 断档 |
 | `setup-task.ps1` | 注册 / 移除计划任务 |
