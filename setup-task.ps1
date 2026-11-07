@@ -33,10 +33,10 @@ if ($Remove) {
 }
 
 function New-BackupTask {
-  param([string]$Name, [string]$Time, [string]$Args, [string]$Description, [string]$DayOfWeek, [switch]$AlsoAtLogOn)
+  param([string]$Name, [string]$Time, [string]$ExtraArgs, [string]$Description, [string]$DayOfWeek, [switch]$AlsoAtLogOn)
 
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"{0}`" {1}" -f $script, $Args)
+    -Argument ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"{0}`" {1}" -f $script, $ExtraArgs)
 
   # 附件备份用「每天触发 + 脚本内按月去重」实现每月一次：
   #   New-ScheduledTaskTrigger 不支持 -Monthly，schtasks 又需要提权，
@@ -64,9 +64,9 @@ function New-BackupTask {
   Write-Host "已注册: $Name  ($Description)"
 }
 
-New-BackupTask -Name $coreTask -Time '03:30' -Args 'pack -IfFreshHours 8' -AlsoAtLogOn -Description 'DSH 每日核心备份（登录也会补跑）并上传私有 Release'
-New-BackupTask -Name $fullTask -Time '04:00' -Args 'pack -Full' -DayOfWeek 'Sunday' -Description 'DSH 每周完整备份（含 attachments），只留本地'
-New-BackupTask -Name $attachTask -Time '04:30' -Args 'pack -AttachmentsOnly' -Description 'DSH 附件备份（每月真正执行一次，脚本内去重），保留 12 份'
+New-BackupTask -Name $coreTask -Time '03:30' -ExtraArgs 'pack -IfFreshHours 8' -AlsoAtLogOn -Description 'DSH 每日核心备份（登录也会补跑）并上传私有 Release'
+New-BackupTask -Name $fullTask -Time '04:00' -ExtraArgs 'pack -Full' -DayOfWeek 'Sunday' -Description 'DSH 每周完整备份（含 attachments），只留本地'
+New-BackupTask -Name $attachTask -Time '04:30' -ExtraArgs 'pack -AttachmentsOnly' -Description 'DSH 附件备份（每月真正执行一次，脚本内去重），保留 12 份'
 
 Write-Host ""
 Write-Host "查看:" -ForegroundColor Cyan
