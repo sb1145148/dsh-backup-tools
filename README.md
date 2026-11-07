@@ -208,4 +208,4 @@ Set-Content -Path "$env:USERPROFILE\.dsh-backup-token" -Value "github_pat_xxx" -
 
 ## 许可
 
-MIT
+MIT（见[LICENSE](LICENSE))
