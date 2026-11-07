@@ -311,4 +311,4 @@ Invoke-RestMethod -Uri 'https://api.github.com/user' `
 
 ## 许可
 
-MIT
+MIT（见[LICENSE](LICENSE))
