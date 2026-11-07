@@ -171,6 +171,109 @@ Set-Content -Path "$env:USERPROFILE\.dsh-backup-token" -Value "github_pat_xxx" -
 
 **原则：本地备份永远先成立，云端只是第二份。**
 
+## 怎么验证它真的在工作
+
+**装完不等于在跑。** 下面是实测通过的检查流程（2026-11-08 验证）。
+
+### ① 先看任务参数对不对
+
+```powershell
+Get-ScheduledTask -TaskName 'DSH-AutoBackup-*' |
+  ForEach-Object {
+    "{0}`n  {1}" -f $_.TaskName, ($_.Actions | Select-Object -First 1).Arguments
+  }
+```
+
+**参数里必须带子命令：**
+
+```text
+DSH-AutoBackup-Core    ... dsh-backup.ps1 pack -IfFreshHours 8
+DSH-AutoBackup-Full    ... dsh-backup.ps1 pack -Full
+DSH-AutoBackup-Attach  ... dsh-backup.ps1 pack -AttachmentsOnly
+```
+
+**如果参数在脚本路径后面就断了，说明只跑 `check`（默认子命令），不会备份。**
+
+> 我们踩过：`setup-task.ps1` 里参数名写成 `$Args`，而 `$Args` 是 PowerShell 的自动变量，
+> 函数内会被覆盖成空 → 三个任务全都只跑 `check`，日志显示的是「体检…结果：健康」。
+
+### ② 手动触发一次
+
+```powershell
+Start-ScheduledTask -TaskName 'DSH-AutoBackup-Core'
+# 等 15-20 秒，看日志
+Get-Content D:\Backup\dsh-backups\backup.log -Tail 8
+```
+
+**成功的日志长这样：**
+
+```text
+[03:21:03] 开始 core 备份
+[03:21:05] 打包前：26 会话 / 44134 事件 / 断档 0
+[03:21:06] 打包完成: 21.1 MB, 96 条目
+[03:21:10] 包内校验：26 会话 / 44134 事件，与打包前一致 ✅
+[03:21:10] 清理旧备份: dsh-backup-20261107-0031.tar.gz
+[03:21:11] 上传成功: dsh-backup-20261108-0321.tar.gz (21.1 MB)
+```
+
+**看到「开始 core 备份」才是真跑了。看到「体检」说明参数没传进去。**
+
+### ③ 三个地方都要对上
+
+| 查什么 | 命令 | 期望 |
+| --- | --- | --- |
+| 本地文件 | `Get-ChildItem D:\Backup\dsh-backups\*.tar.gz` | 最新一份是刚才的时间 |
+| 包内清单 | `tar -xzOf <包> manifest.json` | `sessions` / `events` 与日志一致 |
+| 云端 | `.\dsh-backup.ps1 list` | 有对应日期的 Release |
+
+### ④ 常见现象对照
+
+| 现象 | 含义 | 处理 |
+| --- | --- | --- |
+| 日志只有「体检…结果：健康」 | 任务参数没传进去 | 重跑 `setup-task.ps1`，检查参数 |
+| 「最近一次备份在 X 小时前，跳过」 | 新鲜度闸门生效（`-IfFreshHours 8`） | 正常，不是故障 |
+| 「❌ 上传出错: 401」 | 令牌失效 | 换令牌（见下节） |
+| 「跳过上传」 | 没有令牌 | 写 `%USERPROFILE%\.dsh-backup-token` |
+| 任务结果码 `0` | 成功 | — |
+| 任务结果码 `1` | 有一步失败（通常是上传） | 看日志最后一行 |
+
+### ⑤ 令牌自查
+
+```powershell
+$t = (Get-Content "$env:USERPROFILE\.dsh-backup-token" -Raw).Trim()
+"长度: $($t.Length)  前缀: $($t.Substring(0,16))…"
+```
+
+**用 PowerShell 测有效性（不要用 curl）：**
+
+```powershell
+Invoke-RestMethod -Uri 'https://api.github.com/user' `
+  -Headers @{ Authorization = "Bearer $t"; 'User-Agent' = 'dsh-backup' } |
+  Select-Object login
+```
+
+**两种失败要分清：**
+
+```text
+401 Bad credentials   → 令牌无效/被吊销
+000（curl 返回 000）   → 根本没连上，是网络问题，不是令牌问题
+```
+
+> 这个环境里 `curl` 访问 `api.github.com` 会返回 `000`，但 PowerShell 的
+> `Invoke-RestMethod` 正常。**备份脚本用的正是后者**，所以能用 curl 测出 000 不代表令牌坏了。
+
+### ⑥ 令牌过期前要换
+
+**令牌设了有效期，到期后备份会静默开始报 401。**
+
+**建议在日历上标一下到期日**，或定期看 `list` 里最近一个 Release 是哪天：
+
+```powershell
+.\dsh-backup.ps1 list
+```
+
+**如果最近备份是很久以前，说明链路上某一环断了。**
+
 ## 还原
 
 ```powershell
