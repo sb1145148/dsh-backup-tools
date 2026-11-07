@@ -33,7 +33,7 @@ if ($Remove) {
 }
 
 function New-BackupTask {
-  param([string]$Name, [string]$Time, [string]$Args, [string]$Description, [string]$DayOfWeek, [switch]$Monthly)
+  param([string]$Name, [string]$Time, [string]$Args, [string]$Description, [string]$DayOfWeek, [switch]$AlsoAtLogOn)
 
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
     -Argument ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"{0}`" {1}" -f $script, $Args)
@@ -44,6 +44,15 @@ function New-BackupTask {
   if ($DayOfWeek) { $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $DayOfWeek -At $Time }
   else            { $trigger = New-ScheduledTaskTrigger -Daily -At $Time }
 
+  # 登录后补跑一次（延迟 3 分钟，等 DSH 起来）。
+  # 配合脚本的 -IfFreshHours 8：8 小时内备份过就直接跳过，不会一天打很多份。
+  $triggers = @($trigger)
+  if ($AlsoAtLogOn) {
+    $logon = New-ScheduledTaskTrigger -AtLogOn
+    $logon.Delay = 'PT3M'
+    $triggers += $logon
+  }
+
   $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
@@ -51,11 +60,11 @@ function New-BackupTask {
   if (Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName $Name -Confirm:$false
   }
-  Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Settings $settings -Description $Description | Out-Null
+  Register-ScheduledTask -TaskName $Name -Action $action -Trigger $triggers -Settings $settings -Description $Description | Out-Null
   Write-Host "已注册: $Name  ($Description)"
 }
 
-New-BackupTask -Name $coreTask -Time '03:30' -Args 'pack' -Description 'DSH 每日核心备份并上传私有 Release'
+New-BackupTask -Name $coreTask -Time '03:30' -Args 'pack -IfFreshHours 8' -AlsoAtLogOn -Description 'DSH 每日核心备份（登录也会补跑）并上传私有 Release'
 New-BackupTask -Name $fullTask -Time '04:00' -Args 'pack -Full' -DayOfWeek 'Sunday' -Description 'DSH 每周完整备份（含 attachments），只留本地'
 New-BackupTask -Name $attachTask -Time '04:30' -Args 'pack -AttachmentsOnly' -Description 'DSH 附件备份（每月真正执行一次，脚本内去重），保留 12 份'
 

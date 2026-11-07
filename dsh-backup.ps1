@@ -22,6 +22,7 @@ param(
   [switch]$NoUpload,
   [switch]$Upload,
   [switch]$Force,
+  [int]$IfFreshHours = 0,
   [int]$KeepCore = 7,
   [int]$KeepFull = 3,
   [int]$KeepAttach = 12,
@@ -87,6 +88,21 @@ function Do-Check {
 # ---------------- pack ----------------
 function Do-Pack {
   $kind = if ($Full) { 'full' } else { 'core' }
+
+  # ⓪ 「新鲜度」闸门：登录补跑时用，避免一天打好几次
+  if ($IfFreshHours -gt 0 -and -not $Full -and -not $Force) {
+    $latest = Get-ChildItem $LocalDir -Filter 'dsh-backup-*.tar.gz' -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -notlike 'dsh-backup-full-*' } |
+      Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($latest) {
+      $hours = ((Get-Date) - $latest.LastWriteTime).TotalHours
+      if ($hours -lt $IfFreshHours) {
+        Log ("最近一次备份在 {0:N1} 小时前（{1}），不到 {2} 小时，跳过" -f $hours, $latest.Name, $IfFreshHours)
+        return
+      }
+    }
+  }
+
   $prefix = if ($Full) { 'dsh-backup-full-' } else { 'dsh-backup-' }
   $name = "$prefix$stamp.tar.gz"
   $target = Join-Path $LocalDir $name

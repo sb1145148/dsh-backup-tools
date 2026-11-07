@@ -127,11 +127,19 @@ Set-Content -Path "$env:USERPROFILE\.dsh-backup-token" -Value "github_pat_xxx" -
 
 | 任务 | 时间 | 命令 |
 | --- | --- | --- |
-| `DSH-AutoBackup-Core` | 每天 03:30 | `pack` |
+| `DSH-AutoBackup-Core` | 每天 03:30 **+ 登录后 3 分钟** | `pack -IfFreshHours 8` |
 | `DSH-AutoBackup-Full` | 每周日 04:00 | `pack -Full` |
 | `DSH-AutoBackup-Attach` | 每天 04:30（脚本内按月去重） | `pack -AttachmentsOnly` |
 
-两个任务都开了 `StartWhenAvailable`：关机错过，开机后补跑。
+三个任务都开了 `StartWhenAvailable`：关机错过，开机后补跑。
+
+**核心备份还额外挂了一个「登录触发」**（延迟 3 分钟）：晚上不开机、白天才开也能当天备份上。
+
+配合 `-IfFreshHours 8`：8 小时内已经备份过就直接跳过，不会一天打好几份。
+
+```powershell
+.\dsh-backup.ps1 pack -IfFreshHours 8    # 8 小时内备份过就跳过
+```
 
 ## 校验到底校了什么
 
